@@ -159,21 +159,26 @@ extension DataRequest {
     
     
     /// ImmutableMappable Array Serializer
-    public static func ObjectMapperImmutableArraySerializer<T: ImmutableMappable>(_ keyPath: String?, context: MapContext? = nil) -> MappableArrayResponseSerializer<T> {
-        return MappableArrayResponseSerializer(keyPath, context: context, serializeCallback: {
-             request, response, data, error in
-            
-            if let JSONObject = processResponse(request: request, response: response, data: data, keyPath: keyPath){
-                
-                if let parsedObject = try? Mapper<T>(context: context, shouldIncludeNilValues: false).mapArray(JSONObject: JSONObject) as [T] {
-                    return parsedObject
-                }
-            }
-            
-            let failureReason = "ObjectMapper failed to serialize response."
-            throw AFError.responseSerializationFailed(reason: .decodingFailed(error: newError(.dataSerializationFailed, failureReason: failureReason)))
-        })
-    }
+    public static func ObjectMapperImmutableSerializer<T: ImmutableMappable>(_ keyPath: String?, context: MapContext? = nil) -> DataResponseSerializer<T> {
+         return DataResponseSerializer { request, response, data, error in
+             if let error = checkResponseForError(request: request, response: response, data: data, error: error){
+                 return .failure(error)
+             }
+             
+             if let currentJSONObject = processResponse(request: request, response: response, data: data, keyPath: keyPath) {
+                 let mapper = Mapper<T>(context: context, shouldIncludeNilValues: false)
+                 do {
+                     let parsedObject = try mapper.map(JSONObject: currentJSONObject)
+                     // if parsedObject != nil { // if let parsedObject = parsedObject {
+                     return .success(parsedObject)
+                 } catch {}
+             }
+             
+             let failureReason = "ObjectMapper failed to serialize response."
+             let error = newError(.dataSerializationFailed, failureReason: failureReason)
+             return .failure(error)
+         }
+     }
     
     /**
      Adds a handler to be called once the request has finished. T: BaseMappable
